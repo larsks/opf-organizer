@@ -6,6 +6,7 @@ import yaml
 
 from pathlib import Path
 
+from opf_organizer.exc import OrganizerError
 from opf_organizer.organizer import Organizer
 
 LOG = logging.getLogger()
@@ -38,7 +39,12 @@ def organize_tree(resources, clean, source, dest):
                     docs = yaml.safe_load_all(fd)
 
                     for doc in docs:
-                        organizer.organize(doc)
+                        try:
+                            organizer.organize(doc)
+                        except OrganizerError as err:
+                            LOG.warning('%s (%s): skipped: %s',
+                                        manifest, doc['kind'], err)
+                            continue
 
                 if clean > 1:
                     LOG.info('removing %s', manifest)
@@ -65,4 +71,9 @@ def organize_files(resources, dryrun, dest, sources):
                 docs.extend(doc)
 
     for doc in docs:
-        organizer.organize(doc)
+        try:
+            organizer.organize(doc)
+        except OrganizerError as err:
+            LOG.warning('%s: skipped: %s',
+                        doc['kind'], err)
+            continue

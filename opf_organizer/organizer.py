@@ -1,12 +1,19 @@
+import fnmatch
 import logging
 import yaml
 
 from pathlib import Path
 
+from opf_organizer.exc import InvalidResourceType, UnknownResourceType
+
 LOG = logging.getLogger()
 
 
 class Organizer:
+    skip_patterns = [
+        'kustomize.config.k8s.io/*',
+    ]
+
     def __init__(self, dest, resources):
         self.dest = Path(dest)
         self.resources = resources
@@ -22,15 +29,27 @@ class Organizer:
 
             resmap['{apiGroup}/{kind}'.format(**resource)] = resource
 
-    def target_for(self, doc):
+    def group_for(self, doc):
         try:
             apigroup, version = doc['apiVersion'].split('/')
         except ValueError:
             apigroup = 'core'
 
+        return apigroup
+
+    def target_for(self, doc):
+        apigroup = self.group_for(doc)
+
         reskey = '{apigroup}/{kind}'.format(
             apigroup=apigroup, **doc)
-        resource = self.resmap[reskey]
+
+        if any(fnmatch.fnmatch(reskey, pattern) for pattern in self.skip_patterns):
+            raise InvalidResourceType()
+
+        try:
+            resource = self.resmap[reskey]
+        except KeyError:
+            raise UnknownResourceType()
 
         target = (
             self.dest /
