@@ -59,9 +59,8 @@ can generate a new version of this file with the `resources` command:
 python -m opf_organizer resources -o resources.json
 ```
 
-You can use the updated cache with the `--resources` option to the
-`organize` command:
+You can use the updated cache with the `--resources` option:
 
 ```
-python -m opf_organizer organize --resources resources.json ...
+python -m opf_organizer --resources resources.json organize-tree ...
 ```
