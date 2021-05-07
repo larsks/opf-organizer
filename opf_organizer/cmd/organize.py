@@ -58,25 +58,17 @@ def organize_files(resources, dryrun, dest, sources):
 
     if not sources:
         try:
-            # We transform the generator returned by safe_load_all
-            # into a list so that we trigger YAML processing here
-            # (where we can catch YAMLError exceptions) rather than
-            # later on in the code.
-            docs = list(yaml.safe_load_all(sys.stdin))
+            organizer.organize_many(yaml.safe_load_all(sys.stdin), '<stdin>')
         except yaml.YAMLError as err:
-            LOG.error('stdin: skipping: Not a valid YAML document: %s', err)
-            raise click.Abort()
+            LOG.error('<stdin>: skipping: Not a valid YAML document: %s',
+                      err)
     else:
-        docs = []
         for source in sources:
             path = Path(source)
             with path.open() as fd:
+                docs = yaml.safe_load_all(fd)
                 try:
-                    doc = yaml.safe_load_all(fd)
-                    docs.extend(doc)
+                    organizer.organize_many(docs, filename=path)
                 except yaml.YAMLError as err:
                     LOG.error('%s: skipping: Not a valid YAML document: %s',
-                              source, err)
-                    continue
-
-    organizer.organize_many(docs)
+                              path, err)
