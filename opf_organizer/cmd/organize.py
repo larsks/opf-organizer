@@ -37,14 +37,7 @@ def organize_tree(resources, clean, source, dest):
             if manifest.suffix == '.yaml':
                 with manifest.open() as fd:
                     docs = yaml.safe_load_all(fd)
-
-                    for doc in docs:
-                        try:
-                            organizer.organize(doc)
-                        except OrganizerError as err:
-                            LOG.warning('%s (%s): skipped: %s',
-                                        manifest, doc['kind'], err)
-                            continue
+                    organizer.organize_many(docs, filename=manifest)
 
                 if clean > 1:
                     LOG.info('removing %s', manifest)
@@ -70,10 +63,4 @@ def organize_files(resources, dryrun, dest, sources):
                 doc = yaml.safe_load_all(fd)
                 docs.extend(doc)
 
-    for doc in docs:
-        try:
-            organizer.organize(doc)
-        except OrganizerError as err:
-            LOG.warning('%s: skipped: %s',
-                        doc['kind'], err)
-            continue
+    organizer.organize_many(docs)

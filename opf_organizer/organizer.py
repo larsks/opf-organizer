@@ -2,11 +2,27 @@ import fnmatch
 import logging
 import yaml
 
+from functools import wraps
 from pathlib import Path
 
-from opf_organizer.exc import InvalidResourceType, UnknownResourceType
+from opf_organizer.exc import (
+    InvalidResourceType,
+    NotAResource,
+    OrganizerError,
+    UnknownResourceType,
+)
 
 LOG = logging.getLogger()
+
+
+def validate_doc(func):
+    @wraps(func)
+    def wrapper(self, doc, *args, **kwargs):
+        if any(attr not in doc for attr in ['apiVersion', 'kind']):
+            raise NotAResource()
+        return func(self, doc, *args, **kwargs)
+
+    return wrapper
 
 
 class Organizer:
@@ -29,6 +45,7 @@ class Organizer:
 
             resmap['{apiGroup}/{kind}'.format(**resource)] = resource
 
+    @validate_doc
     def group_for(self, doc):
         try:
             apigroup, version = doc['apiVersion'].split('/')
@@ -37,6 +54,7 @@ class Organizer:
 
         return apigroup
 
+    @validate_doc
     def target_for(self, doc):
         apigroup = self.group_for(doc)
 
@@ -66,3 +84,12 @@ class Organizer:
         LOG.info('writing to %s', target)
         with target.open('w') as fd:
             yaml.safe_dump(doc, fd)
+
+    def organize_many(self, docs, filename='<none>'):
+        for docnum, doc in enumerate(docs):
+            try:
+                self.organize(doc)
+            except OrganizerError as err:
+                LOG.warning('%s.%d: skipped: %s',
+                            filename, docnum, err)
+                continue
