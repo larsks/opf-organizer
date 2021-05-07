@@ -15,13 +15,14 @@ LOG = logging.getLogger()
 @click.option('-k', '--clean',
               count=True)
 @click.option('-d', '--dest')
+@click.option('--kustomize/--no-kustomize', default=True)
 @click.argument('source')
 @click.pass_obj
-def organize_tree(resources, clean, source, dest):
+def organize_tree(resources, clean, dest, kustomize, source):
     if not dest:
         dest = source
 
-    organizer = Organizer(dest, resources)
+    organizer = Organizer(dest, resources, kustomize=kustomize)
 
     for dirpath, dirnames, filenames in os.walk(source):
         for filename in filenames:

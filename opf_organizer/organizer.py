@@ -30,9 +30,10 @@ class Organizer:
         'kustomize.config.k8s.io/*',
     ]
 
-    def __init__(self, dest, resources):
+    def __init__(self, dest, resources, kustomize=True):
         self.dest = Path(dest)
         self.resources = resources
+        self.kustomize = kustomize
 
         self._gen_resmap()
 
@@ -73,7 +74,8 @@ class Organizer:
             self.dest /
             resource['apiGroup'] /
             resource['name'] /
-            '{}.yaml'.format(doc['metadata']['name'])
+            doc['metadata']['name'] /
+            '{}.yaml'.format(doc['kind'].lower())
         )
 
         return target
@@ -81,9 +83,19 @@ class Organizer:
     def organize(self, doc):
         target = self.target_for(doc)
         target.parent.mkdir(parents=True, exist_ok=True)
-        LOG.info('writing to %s', target)
+        LOG.info('writing resource to %s', target)
         with target.open('w') as fd:
             yaml.safe_dump(doc, fd)
+
+        if self.kustomize:
+            kustom = target.parent / 'kustomization.yaml'
+            LOG.info('writing kustomization to %s', kustom)
+            with kustom.open('w') as fd:
+                yaml.safe_dump({
+                    'apiVersion': 'kustomize.config.k8s.io/v1beta1',
+                    'kind': 'Kustomization',
+                    'resources': [target.name],
+                }, fd)
 
     def organize_many(self, docs, filename='<none>'):
         for docnum, doc in enumerate(docs):
