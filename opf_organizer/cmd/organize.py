@@ -6,7 +6,6 @@ import yaml
 
 from pathlib import Path
 
-from opf_organizer.exc import OrganizerError
 from opf_organizer.organizer import Organizer
 
 LOG = logging.getLogger()
@@ -36,8 +35,12 @@ def organize_tree(resources, clean, source, dest):
 
             if manifest.suffix == '.yaml':
                 with manifest.open() as fd:
-                    docs = yaml.safe_load_all(fd)
-                    organizer.organize_many(docs, filename=manifest)
+                    try:
+                        docs = yaml.safe_load_all(fd)
+                        organizer.organize_many(docs, filename=manifest)
+                    except yaml.YAMLError as err:
+                        LOG.error('%s: skipping: Not a valid YAML document: %s',
+                                  manifest, err)
 
                 if clean > 1:
                     LOG.info('removing %s', manifest)
@@ -54,13 +57,26 @@ def organize_files(resources, dryrun, dest, sources):
     organizer = Organizer(dest, resources)
 
     if not sources:
-        docs = yaml.safe_load_all(sys.stdin)
+        try:
+            # We transform the generator returned by safe_load_all
+            # into a list so that we trigger YAML processing here
+            # (where we can catch YAMLError exceptions) rather than
+            # later on in the code.
+            docs = list(yaml.safe_load_all(sys.stdin))
+        except yaml.YAMLError as err:
+            LOG.error('stdin: skipping: Not a valid YAML document: %s', err)
+            raise click.Abort()
     else:
         docs = []
         for source in sources:
             path = Path(source)
             with path.open() as fd:
-                doc = yaml.safe_load_all(fd)
-                docs.extend(doc)
+                try:
+                    doc = yaml.safe_load_all(fd)
+                    docs.extend(doc)
+                except yaml.YAMLError as err:
+                    LOG.error('%s: skipping: Not a valid YAML document: %s',
+                              source, err)
+                    continue
 
     organizer.organize_many(docs)
