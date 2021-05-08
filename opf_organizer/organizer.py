@@ -1,5 +1,9 @@
+import contextlib
 import fnmatch
+import json
 import logging
+import pkg_resources
+import os
 import yaml
 
 from functools import wraps
@@ -12,6 +16,8 @@ from opf_organizer.exc import (
     UnknownResourceType,
 )
 
+KUSTOMIZE_KIND = 'Kustomization'
+KUSTOMIZE_API_VERSION = 'kustomize.config.k8s.io/v1beta1'
 LOG = logging.getLogger()
 
 
@@ -25,21 +31,44 @@ def validate_doc(func):
     return wrapper
 
 
+def get_api_resources(path=None):
+    if not path:
+        path = os.environ.get('OPF_API_RESOURCES')
+
+    if path:
+        fd = open(path, 'r')
+    else:
+        fd = pkg_resources.resource_stream(
+            'opf_organizer', 'data/resources.json')
+
+    with fd:
+        resources = json.load(fd)
+
+    return resources
+
+
 class Organizer:
     skip_patterns = [
         'kustomize.config.k8s.io/*',
     ]
 
-    def __init__(self, dest, resources, kustomize=True):
+    def __init__(self, dest,
+                 api_resources=None,
+                 api_resources_path=None,
+                 kustomize=True):
         self.dest = Path(dest)
-        self.resources = resources
         self.kustomize = kustomize
+
+        if api_resources:
+            self.api_resources = api_resources
+        else:
+            self.api_resources = get_api_resources(api_resources_path)
 
         self._gen_resmap()
 
     def _gen_resmap(self):
         self.resmap = resmap = {}
-        for resource in self.resources:
+        for resource in self.api_resources:
             # I don't know what these are but they throw everything off.
             if '/' in resource['name']:
                 continue
@@ -80,7 +109,7 @@ class Organizer:
 
         return target
 
-    def organize(self, doc):
+    def organize(self, doc, kustomization=None):
         target = self.target_for(doc)
         target.parent.mkdir(parents=True, exist_ok=True)
         LOG.info('writing resource to %s', target)
@@ -91,16 +120,23 @@ class Organizer:
             kustom = target.parent / 'kustomization.yaml'
             LOG.info('writing kustomization to %s', kustom)
             with kustom.open('w') as fd:
-                yaml.safe_dump({
-                    'apiVersion': 'kustomize.config.k8s.io/v1beta1',
-                    'kind': 'Kustomization',
-                    'resources': [target.name],
-                }, fd)
+                if kustomization:
+                    data = kustomization
+                else:
+                    data = {}
 
-    def organize_many(self, docs, filename='<none>'):
+                data.update({
+                    'apiVersion': KUSTOMIZE_API_VERSION,
+                    'kind': KUSTOMIZE_KIND,
+                    'resources': [target.name],
+                })
+
+                yaml.safe_dump(data, fd)
+
+    def organize_many(self, docs, filename='<none>', kustomization=None):
         for docnum, doc in enumerate(docs):
             try:
-                self.organize(doc)
+                self.organize(doc, kustomization=kustomization)
             except OrganizerError as err:
                 LOG.warning('%s.%d: skipped: %s',
                             filename, docnum, err)

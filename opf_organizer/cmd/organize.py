@@ -18,27 +18,36 @@ LOG = logging.getLogger()
 @click.option('--kustomize/--no-kustomize', default=True)
 @click.argument('source')
 @click.pass_obj
-def organize_tree(resources, clean, dest, kustomize, source):
+def organize_tree(config, clean, dest, kustomize, source):
     if not dest:
         dest = source
 
-    organizer = Organizer(dest, resources, kustomize=kustomize)
+    organizer = Organizer(dest,
+                          kustomize=kustomize,
+                          api_resources_path=config.api_resources_path)
 
     for dirpath, dirnames, filenames in os.walk(source):
+        if 'kustomization.yaml' in filenames:
+            path = Path(dirpath) / 'kustomization.yaml'
+            with path.open() as fd:
+                kustomization = yaml.safe_load(fd)
+            if clean > 0:
+                LOG.info('removing %s', path)
+                path.unlink()
+
         for filename in filenames:
             manifest = Path(dirpath) / filename
 
             if manifest.name == 'kustomization.yaml':
-                if clean > 0:
-                    LOG.info('removing %s', manifest)
-                    manifest.unlink()
                 continue
 
             if manifest.suffix == '.yaml':
                 with manifest.open() as fd:
                     try:
                         docs = yaml.safe_load_all(fd)
-                        organizer.organize_many(docs, filename=manifest)
+                        organizer.organize_many(docs,
+                                                filename=manifest,
+                                                kustomization=kustomization)
                     except yaml.YAMLError as err:
                         LOG.error('%s: skipping: Not a valid YAML document: %s',
                                   manifest, err)
@@ -54,8 +63,9 @@ def organize_tree(resources, clean, dest, kustomize, source):
 @click.option('-d', '--dest', default='.')
 @click.argument('sources', nargs=-1)
 @click.pass_obj
-def organize_files(resources, dryrun, dest, sources):
-    organizer = Organizer(dest, resources)
+def organize_files(config, dryrun, dest, sources):
+    organizer = Organizer(dest,
+                          api_resources_path=config.api_resources_path)
 
     if not sources:
         try:
