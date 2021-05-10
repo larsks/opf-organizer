@@ -11,29 +11,59 @@ from opf_organizer.organizer import Organizer
 LOG = logging.getLogger()
 
 
+def truncate_path(path, name):
+    while path.name != name:
+        if path == path.parent:
+            break
+        path = path.parent
+    else:
+        return path
+
+    return None
+
+
+def adjust_components(kustomization, components):
+    adjusted = []
+    components = Path(components)
+    if 'components' in kustomization:
+        for component in kustomization['components']:
+            component = Path(component)
+            old_comp = truncate_path(component, 'components')
+            rel_path = component.relative_to(old_comp)
+            newpath = components / rel_path
+            adjusted.append(str(newpath))
+
+            kustomization['components'] = adjusted
+
+
 @click.command()
 @click.option('-k', '--clean',
               count=True)
 @click.option('-d', '--dest')
+@click.option('-c', '--components-path')
 @click.option('--kustomize/--no-kustomize', default=True)
 @click.argument('source')
 @click.pass_obj
-def organize_tree(config, clean, dest, kustomize, source):
+def organize_tree(config, clean, components_path, dest, kustomize, source):
     if not dest:
         dest = source
 
     organizer = Organizer(dest,
-                          kustomize=kustomize,
-                          api_resources_path=config.api_resources_path)
+                          config=config,
+                          kustomize=kustomize)
 
     for dirpath, dirnames, filenames in os.walk(source):
         if 'kustomization.yaml' in filenames:
             path = Path(dirpath) / 'kustomization.yaml'
             with path.open() as fd:
                 kustomization = yaml.safe_load(fd)
+            if components_path:
+                adjust_components(kustomization, components_path)
             if clean > 0:
                 LOG.info('removing %s', path)
                 path.unlink()
+        else:
+            kustomization = None
 
         for filename in filenames:
             manifest = Path(dirpath) / filename
@@ -46,7 +76,7 @@ def organize_tree(config, clean, dest, kustomize, source):
                     try:
                         docs = yaml.safe_load_all(fd)
                         organizer.organize_many(docs,
-                                                filename=manifest,
+                                                path=manifest,
                                                 kustomization=kustomization)
                     except yaml.YAMLError as err:
                         LOG.error('%s: skipping: Not a valid YAML document: %s',
@@ -65,7 +95,7 @@ def organize_tree(config, clean, dest, kustomize, source):
 @click.pass_obj
 def organize_files(config, dryrun, dest, sources):
     organizer = Organizer(dest,
-                          api_resources_path=config.api_resources_path)
+                          config=config)
 
     if not sources:
         try:

@@ -13,3 +13,11 @@ class UnknownResourceType(OrganizerError):
 
 class NotAResource(OrganizerError):
     '''Not a Kubernetes resources'''
+
+
+class NamespacedResource(OrganizerError):
+    '''Can't organize namespaced resources'''
+
+
+class FileExists(OrganizerError):
+    '''Destination file already exists'''

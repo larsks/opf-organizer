@@ -10,6 +10,7 @@ from functools import wraps
 from pathlib import Path
 
 from opf_organizer.exc import (
+    FileExists,
     InvalidResourceType,
     NotAResource,
     OrganizerError,
@@ -53,16 +54,17 @@ class Organizer:
     ]
 
     def __init__(self, dest,
+                 config=None,
                  api_resources=None,
-                 api_resources_path=None,
                  kustomize=True):
         self.dest = Path(dest)
         self.kustomize = kustomize
+        self.config = config
 
         if api_resources:
             self.api_resources = api_resources
         else:
-            self.api_resources = get_api_resources(api_resources_path)
+            self.api_resources = get_api_resources(config.api_resources_path)
 
         self._gen_resmap()
 
@@ -99,6 +101,10 @@ class Organizer:
         except KeyError:
             raise UnknownResourceType()
 
+        if 'namespaced' in self.config.warnings and resource['namespaced']:
+            LOG.warning('%s: organizing namespaced resource',
+                        reskey)
+
         target = (
             self.dest /
             resource['apiGroup'] /
@@ -109,8 +115,12 @@ class Organizer:
 
         return target
 
-    def organize(self, doc, kustomization=None):
+    def organize(self, doc, kustomization=None, path=None):
         target = self.target_for(doc)
+
+        if target.exists() and not self.config.force:
+            raise FileExists()
+
         target.parent.mkdir(parents=True, exist_ok=True)
         LOG.info('writing resource to %s', target)
         with target.open('w') as fd:
@@ -133,11 +143,11 @@ class Organizer:
 
                 yaml.safe_dump(data, fd)
 
-    def organize_many(self, docs, filename='<none>', kustomization=None):
+    def organize_many(self, docs, path=None, kustomization=None):
         for docnum, doc in enumerate(docs):
             try:
-                self.organize(doc, kustomization=kustomization)
+                self.organize(doc, path=path, kustomization=kustomization)
             except OrganizerError as err:
                 LOG.warning('%s.%d: skipped: %s',
-                            filename, docnum, err)
+                            path if path else '<none>', docnum, err)
                 continue
