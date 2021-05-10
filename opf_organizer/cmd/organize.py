@@ -109,7 +109,7 @@ def organize_files(config, dryrun, dest, sources):
             with path.open() as fd:
                 docs = yaml.safe_load_all(fd)
                 try:
-                    organizer.organize_many(docs, filename=path)
+                    organizer.organize_many(docs, path=path)
                 except yaml.YAMLError as err:
                     LOG.error('%s: skipping: Not a valid YAML document: %s',
                               path, err)

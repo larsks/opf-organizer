@@ -22,6 +22,18 @@ KUSTOMIZE_API_VERSION = 'kustomize.config.k8s.io/v1beta1'
 LOG = logging.getLogger()
 
 
+yaml.SafeDumper.org_represent_str = yaml.SafeDumper.represent_str
+
+
+def repr_str(dumper, data):
+    if '\n' in data:
+        return dumper.represent_scalar(u'tag:yaml.org,2002:str', data, style='|')
+    return dumper.org_represent_str(data)
+
+
+yaml.add_representer(str, repr_str, Dumper=yaml.SafeDumper)
+
+
 def validate_doc(func):
     @wraps(func)
     def wrapper(self, doc, *args, **kwargs):
