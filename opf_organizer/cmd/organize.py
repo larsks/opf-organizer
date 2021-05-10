@@ -7,6 +7,7 @@ import yaml
 from pathlib import Path
 
 from opf_organizer.organizer import Organizer
+from opf_organizer.exc import OrganizerError
 
 LOG = logging.getLogger()
 
@@ -72,15 +73,21 @@ def organize_tree(config, clean, components_path, dest, kustomize, source):
                 continue
 
             if manifest.suffix == '.yaml':
-                with manifest.open() as fd:
+                try:
                     try:
-                        docs = yaml.safe_load_all(fd)
-                        organizer.organize_many(docs,
-                                                path=manifest,
+                        with manifest.open() as fd:
+                            doc = yaml.safe_load(fd)
+
+                        organizer.organize_path(manifest, doc,
                                                 kustomization=kustomization)
-                    except yaml.YAMLError as err:
-                        LOG.error('%s: skipping: Not a valid YAML document: %s',
-                                  manifest, err)
+                    except yaml.composer.ComposerError:
+                        with manifest.open() as fd:
+                            docs = yaml.safe_load_all(fd)
+
+                            organizer.organize_many(docs,
+                                                    path=manifest)
+                except OrganizerError as err:
+                    LOG.error('%s: skipping: %s', manifest, err)
 
                 if clean > 1:
                     LOG.info('removing %s', manifest)
@@ -99,7 +106,8 @@ def organize_files(config, dryrun, dest, sources):
 
     if not sources:
         try:
-            organizer.organize_many(yaml.safe_load_all(sys.stdin), '<stdin>')
+            organizer.organize_many(yaml.safe_load_all(sys.stdin),
+                                    path='<stdin>')
         except yaml.YAMLError as err:
             LOG.error('<stdin>: skipping: Not a valid YAML document: %s',
                       err)

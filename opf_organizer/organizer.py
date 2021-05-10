@@ -127,7 +127,42 @@ class Organizer:
 
         return target
 
-    def organize(self, doc, kustomization=None, path=None):
+    def _write_kustomization(self, target, kustomization):
+        kustom = target.parent / 'kustomization.yaml'
+        LOG.info('writing kustomization to %s', kustom)
+        with kustom.open('w') as fd:
+            if kustomization:
+                data = kustomization
+            else:
+                data = {}
+
+            data.update({
+                'apiVersion': KUSTOMIZE_API_VERSION,
+                'kind': KUSTOMIZE_KIND,
+                'resources': [target.name],
+            })
+
+            yaml.safe_dump(data, fd)
+
+    def organize_path(self, path, doc, kustomization=None):
+        target = self.target_for(doc)
+
+        if target.exists() and not self.config.force:
+            raise FileExists()
+
+        target.parent.mkdir(parents=True, exist_ok=True)
+        LOG.info('writing %s to %s', path, target)
+        with path.open('r') as srcfd, target.open('w') as dstfd:
+            while True:
+                data = srcfd.read(8192)
+                if not data:
+                    break
+                dstfd.write(data)
+
+        if self.kustomize:
+            self._write_kustomization(target, kustomization)
+
+    def organize_doc(self, doc, kustomization=None, path=None):
         target = self.target_for(doc)
 
         if target.exists() and not self.config.force:
@@ -139,26 +174,12 @@ class Organizer:
             yaml.safe_dump(doc, fd)
 
         if self.kustomize:
-            kustom = target.parent / 'kustomization.yaml'
-            LOG.info('writing kustomization to %s', kustom)
-            with kustom.open('w') as fd:
-                if kustomization:
-                    data = kustomization
-                else:
-                    data = {}
-
-                data.update({
-                    'apiVersion': KUSTOMIZE_API_VERSION,
-                    'kind': KUSTOMIZE_KIND,
-                    'resources': [target.name],
-                })
-
-                yaml.safe_dump(data, fd)
+            self._write_kustomization(target, kustomization)
 
     def organize_many(self, docs, path=None, kustomization=None):
         for docnum, doc in enumerate(docs):
             try:
-                self.organize(doc, path=path, kustomization=kustomization)
+                self.organize_doc(doc, path=path, kustomization=kustomization)
             except OrganizerError as err:
                 LOG.warning('%s.%d: skipped: %s',
                             path if path else '<none>', docnum, err)
